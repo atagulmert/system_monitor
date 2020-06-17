@@ -1,8 +1,11 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 
 import rospy
 from diagnostic_msgs.msg import DiagnosticArray
 from system_monitor.msg import *
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
 
 class Monitor():
 
@@ -147,17 +150,55 @@ class Monitor():
 
 # Print CPU status
 def callback(data):
+
+	global memory_it
+	global network_it
+	global cpu_it
+	global memory_usage
+	global input_trafic
+	global output_trafic
+	global average_cpu_temp
+
 	if data.status[0].name.startswith('Memory'):
+		memory_usage.append(int(data.status[0].values[4].value[:-1]))
+		axs[0].plot(range(0,memory_it),memory_usage)
+		plt.draw()
+		plt.pause(0.0001)
+		memory_it+=1
 		#Extract useful data from memory
 		mon.update_mem_values(data.status[0])
 	elif data.status[0].name.startswith('Network'):
+		# This changes with available networks
 		#Extract useful data from network
+		input_trafic.append(float(data.status[0].values[4].value[:-7]))
+		output_trafic.append(float(data.status[0].values[5].value[:-7]))
+		axs[1].plot(range(0,network_it),input_trafic)
+		axs[2].plot(range(0,network_it),output_trafic)
+		plt.draw()
+		plt.pause(0.0001)
+		network_it+=1
 		mon.update_net_values(data.status[0])
 	elif data.status[0].name.startswith('CPU Temperature'):
 		#Extract useful data from cpu
+		cpu_temps=[]
+		for i in range(len(data.status[0].values[2:])):
+			temp = float(data.status[0].values[2:][i].value.replace('DegC',''))
+			if temp < 150 and temp > 0:
+				cpu_temps.append(temp)
+			else:
+				rospy.logwarn('One of the core temperatures is out of range 0DegC - 150DegC. Value is probably not real, removing it.')
+		average_cpu_temp.append(np.mean(cpu_temps))
+		axs[3].plot(range(0,cpu_it),average_cpu_temp)
+		plt.draw()
+		plt.pause(0.0001)
+		cpu_it+=1
+
 		mon.update_cpu_temp_values(data.status[0])
 		mon.update_cpu_usa_values(data.status[1])
+
 	elif data.status[0].name.startswith("HDD Usage"):
+
+		print(data.status[0].values)
 		#Extract useful data from disk
 		mon.update_hdd_values(data.status[0])
 
@@ -165,5 +206,31 @@ def callback(data):
 if __name__ == '__main__':
 	rospy.init_node('system_monitor_node')
 	mon = Monitor()
+
+	plt.ion()
+	fig, axs = plt.subplots(4)
+
+	memory_it = 1
+	network_it = 1
+	cpu_it = 1
+	memory_usage = []
+	input_trafic = []
+	output_trafic = []
+	average_cpu_temp = []
+	axs[0].set_title('Memory Usage (MB)')
+	axs[1].set_title('Input Trafic (MBps)')
+	axs[2].set_title('Output Trafic (MBps)')
+	axs[3].set_title('CPU Tempature (DegC)')
+
+	for i in range(4):
+		axs[i].tick_params(
+		axis='x',          
+		which='both',      
+		bottom=False,      
+		top=False,         
+		labelbottom=False)
+		axs[i].set_xlabel('Time')
+	plt.tight_layout()
 	rospy.Subscriber('/diagnostics', DiagnosticArray, callback)
-	rospy.spin()
+	#rospy.spin()
+	plt.show(block=True)
