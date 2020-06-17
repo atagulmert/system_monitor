@@ -6,6 +6,7 @@ from system_monitor.msg import *
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+import os
 
 class Monitor():
 
@@ -159,27 +160,41 @@ def callback(data):
 	global output_trafic
 	global average_cpu_temp
 
+	global cpu_log_file
+	global network_log_file
+	global memory_log_file
+
+	dt_string = datetime.now().strftime("%d.%m.%Y-%H:%M:%S")
+
 	if data.status[0].name.startswith('Memory'):
-		memory_usage.append(int(data.status[0].values[4].value[:-1]))
+		temp_data = data.status[0].values[4].value[:-1]
+		memory_usage.append(int(temp_data))
 		axs[0].plot(range(0,memory_it),memory_usage)
 		plt.draw()
 		plt.pause(0.0001)
 		memory_it+=1
+
+		memory_log_file.write(dt_string+" -- "+str(temp_data)+"\n")
 		#Extract useful data from memory
 		mon.update_mem_values(data.status[0])
 	elif data.status[0].name.startswith('Network'):
 		# This changes with available networks
-		#Extract useful data from network
-		input_trafic.append(float(data.status[0].values[4].value[:-7]))
-		output_trafic.append(float(data.status[0].values[5].value[:-7]))
+		
+		temp_input_data = data.status[0].values[4].value[:-7]
+		temp_output_data = data.status[0].values[5].value[:-7]
+		input_trafic.append(float(temp_input_data))
+		output_trafic.append(float(temp_output_data))
 		axs[1].plot(range(0,network_it),input_trafic)
 		axs[2].plot(range(0,network_it),output_trafic)
 		plt.draw()
 		plt.pause(0.0001)
 		network_it+=1
+
+		network_log_file.write(dt_string+" -- Input: "+str(temp_input_data)+" - "+" Output: "+str(temp_output_data)+"\n")
+		#Extract useful data from network
 		mon.update_net_values(data.status[0])
 	elif data.status[0].name.startswith('CPU Temperature'):
-		#Extract useful data from cpu
+		
 		cpu_temps=[]
 		for i in range(len(data.status[0].values[2:])):
 			temp = float(data.status[0].values[2:][i].value.replace('DegC',''))
@@ -193,12 +208,12 @@ def callback(data):
 		plt.pause(0.0001)
 		cpu_it+=1
 
+		cpu_log_file.write(dt_string+" -- "+str(np.mean(cpu_temps))+"\n")
+		#Extract useful data from cpu
 		mon.update_cpu_temp_values(data.status[0])
 		mon.update_cpu_usa_values(data.status[1])
 
 	elif data.status[0].name.startswith("HDD Usage"):
-
-		print(data.status[0].values)
 		#Extract useful data from disk
 		mon.update_hdd_values(data.status[0])
 
@@ -206,6 +221,11 @@ def callback(data):
 if __name__ == '__main__':
 	rospy.init_node('system_monitor_node')
 	mon = Monitor()
+
+	dt_string = datetime.now().strftime("%d.%m.%Y-%H:%M:%S")
+	cpu_log_file = open("system-monitor-cpu-"+dt_string+".txt","w+")
+	memory_log_file = open("system-monitor-memory-"+dt_string+".txt","w+")
+	network_log_file = open("system-monitor-network-"+dt_string+".txt","w+")
 
 	plt.ion()
 	fig, axs = plt.subplots(4)
